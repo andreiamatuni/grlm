@@ -1,3 +1,5 @@
+import argparse
+import os.path as osp
 import random
 from collections import Counter
 
@@ -7,13 +9,35 @@ from torch.utils.data import DataLoader, Dataset
 
 from model import (
     GrassmannianLanguageModel,
-    generate_text,
+    # generate_text,
     load_grassmannian_model,
     save_grassmannian_model,
 )
 
-# Load WikiText-2 (raw)
-dataset = load_dataset("wikitext", "wikitext-2-raw-v1")
+parser = argparse.ArgumentParser(description="Train a Grassmannian language model")
+parser.add_argument(
+    "--num_epochs", type=int, default=5, help="number of epochs to train"
+)
+parser.add_argument("--batch_size", type=int, default=32, help="batch size")
+parser.add_argument("--seq_len", type=int, default=16, help="sequence length")
+parser.add_argument(
+    "--max_samples", type=int, default=100000, help="maximum number of samples"
+)
+parser.add_argument("--lr", type=float, default=1e-3, help="learning rate")
+parser.add_argument(
+    "--save_path", type=str, default="model.pt", help="path to save model"
+)
+parser.add_argument(
+    "--n", type=int, default=512, help="ambient dimension of the Grassmannian"
+)
+parser.add_argument(
+    "--k", type=int, default=128, help="dimension of the Grassmannian subspace"
+)
+parser.add_argument("--d_model", type=int, default=256, help="embedding dimension")
+args = parser.parse_args()
+
+# Load WikiText-103 (raw)
+dataset = load_dataset("wikitext", "wikitext-103-raw-v1")
 train_texts = dataset["train"]["text"]
 
 
@@ -76,16 +100,17 @@ class WikiTextWindowDataset(Dataset):
         return torch.tensor(x, dtype=torch.long), torch.tensor(y, dtype=torch.long)
 
 
-seq_len = 16
-train_dataset = WikiTextWindowDataset(train_texts, seq_len=seq_len, max_samples=200000)
-train_loader = DataLoader(train_dataset, batch_size=256, shuffle=True)
+train_dataset = WikiTextWindowDataset(
+    train_texts, seq_len=args.seq_len, max_samples=args.max_samples
+)
+train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
 
 config = {
     "vocab_size": vocab_size,
-    "d_model": 128,
-    "n": 512,
-    "k": 128,
-    "seq_len": seq_len,
+    "d_model": args.d_model,
+    "n": args.n,
+    "k": args.k,
+    "seq_len": args.seq_len,
 }
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -93,14 +118,13 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("device: ", device)
 
 model = GrassmannianLanguageModel(
-    vocab_size=vocab_size, d_model=config["d_model"], n=config["n"], k=config["k"]
+    vocab_size=vocab_size, d_model=args.d_model, n=args.n, k=args.k
 ).to(device)
 
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
-num_epochs = 15
 
-for epoch in range(num_epochs):
+for epoch in range(args.num_epochs):
     model.train()
     total_loss = 0.0
     for step, (input_ids, target_ids) in enumerate(train_loader):
@@ -130,23 +154,5 @@ save_grassmannian_model(
 )
 
 model, optimizer_state, itos, stoi, config = load_grassmannian_model(
-    "checkpoints/grass_model.pt", model_class=GrassmannianLanguageModel
+    osp.join("checkpoints", args.save_path), model_class=GrassmannianLanguageModel
 )
-
-
-prompt = "The history of natural language models"
-generated = generate_text(
-    model=model,
-    prompt=prompt,
-    stoi=stoi,
-    itos=itos,
-    tokenize=tokenize,
-    encode=encode,
-    seq_len=seq_len,  # same as used in training
-    max_new_tokens=50,
-    temperature=0.9,
-    top_k=40,
-    device=device,
-)
-
-print(generated)
