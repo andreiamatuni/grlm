@@ -22,6 +22,14 @@ class GrassmannianLanguageModel(nn.Module):
         # 1) Context encoder: token embeddings -> mean pooled context vector
         self.token_inp_emb = nn.Embedding(vocab_size, d_model)
 
+        self.gru = nn.GRU(
+            input_size=d_model,
+            hidden_size=d_model,
+            num_layers=1,
+            batch_first=True,
+            bidirectional=False,
+        )
+
         # 2) Map context vector -> A \in R^{n x k} (will approximate a basis for subspace)
         self.ctx_to_A = nn.Linear(d_model, n * k)
 
@@ -42,8 +50,10 @@ class GrassmannianLanguageModel(nn.Module):
         # ----- 1) Encode context -----
         # (B, L, d_model)
         inp_emb = self.token_inp_emb(input_ids)
+        output, h_n = self.gru(inp_emb)
+        ctx_vec = h_n[-1]
         # mean-pool over sequence: (B, d_model)
-        ctx_vec = inp_emb.mean(dim=1)
+        # ctx_vec = inp_emb.mean(dim=1)
 
         # ----- 2) Map context -> A (approx Grassmannian point) -----
         # (B, n*k)

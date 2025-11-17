@@ -78,18 +78,17 @@ class WikiTextWindowDataset(Dataset):
 
 seq_len = 16
 train_dataset = WikiTextWindowDataset(train_texts, seq_len=seq_len, max_samples=100000)
-train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True)
+train_loader = DataLoader(train_dataset, batch_size=256, shuffle=True)
 
 config = {
     "vocab_size": vocab_size,
     "d_model": 128,
     "n": 512,
-    "k": 64,
+    "k": 128,
     "seq_len": seq_len,
 }
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-# device = torch.device("mps" if torch.mps.is_available() else "cpu")
 
 print("device: ", device)
 
@@ -99,7 +98,7 @@ model = GrassmannianLanguageModel(
 
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
-num_epochs = 6
+num_epochs = 15
 
 for epoch in range(num_epochs):
     model.train()
