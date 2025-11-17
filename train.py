@@ -77,7 +77,7 @@ class WikiTextWindowDataset(Dataset):
 
 
 seq_len = 16
-train_dataset = WikiTextWindowDataset(train_texts, seq_len=seq_len, max_samples=100000)
+train_dataset = WikiTextWindowDataset(train_texts, seq_len=seq_len, max_samples=200000)
 train_loader = DataLoader(train_dataset, batch_size=256, shuffle=True)
 
 config = {

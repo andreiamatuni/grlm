@@ -64,13 +64,6 @@ class GrassmannianLanguageModel(nn.Module):
         # Option 1 (simple): use A directly and add an orthogonality penalty
         U = A  # (B, n, k)
 
-        # If you prefer strict orthonormal columns, you could do QR per batch:
-        # U_list = []
-        # for b in range(B):
-        #     q, r = torch.linalg.qr(A[b])
-        #     U_list.append(q)
-        # U = torch.stack(U_list, dim=0)  # (B, n, k)
-
         # ----- 3) Build projection matrices P = U U^T -----
         # (B, n, n)
         P = torch.bmm(U, U.transpose(1, 2))
