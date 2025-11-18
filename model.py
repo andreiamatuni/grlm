@@ -3,6 +3,22 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+class GRULM(nn.Module):
+    def __init__(self, vocab_size: int, d_model: int = 128, num_layers: int = 1):
+        super().__init__()
+        self.vocab_size = vocab_size
+        self.gru = nn.GRU(
+            input_size=d_model,
+            hidden_size=d_model,
+            num_layers=1,
+            batch_first=True,
+            bidirectional=False,
+        )
+
+    def forward(self, input_ids, target_ids=None, lambda_ortho=1e-3):
+        pass
+
+
 class GrassmannianLanguageModel(nn.Module):
     def __init__(
         self,
@@ -47,28 +63,26 @@ class GrassmannianLanguageModel(nn.Module):
         """
         B, L = input_ids.shape
 
-        # ----- 1) Encode context -----
+        # Encode context
         # (B, L, d_model)
         inp_emb = self.token_inp_emb(input_ids)
         output, h_n = self.gru(inp_emb)
         ctx_vec = h_n[-1]
-        # mean-pool over sequence: (B, d_model)
-        # ctx_vec = inp_emb.mean(dim=1)
 
-        # ----- 2) Map context -> A (approx Grassmannian point) -----
+        # Map context -> A (approx Grassmannian point)
         # (B, n*k)
         A_flat = self.ctx_to_A(ctx_vec)
         # (B, n, k)
         A = A_flat.view(B, self.n, self.k)
 
-        # Option 1 (simple): use A directly and add an orthogonality penalty
+        # use A directly and add an orthogonality penalty
         U = A  # (B, n, k)
 
-        # ----- 3) Build projection matrices P = U U^T -----
+        # Build projection matrices P = U U^T
         # (B, n, n)
         P = torch.bmm(U, U.transpose(1, 2))
 
-        # ----- 4) Score each vocab token by how much it lives in the subspace -----
+        # Score each vocab token by how much it lives in the subspace
         # token_geom_emb.weight: (V, n)
         E = self.token_geom_emb.weight  # (V, n)
 
@@ -98,29 +112,6 @@ class GrassmannianLanguageModel(nn.Module):
         return logits, loss
 
 
-def sample_from_logits(logits, temperature=1.0, top_k=None):
-    """
-    logits: (vocab_size,)
-    returns: int token_id
-    """
-    if temperature <= 0:
-        raise ValueError("temperature must be > 0")
-
-    logits = logits / temperature
-
-    if top_k is not None and top_k > 0:
-        # keep only top_k tokens
-        values, indices = torch.topk(logits, k=top_k)
-        # set others to -inf
-        mask = torch.full_like(logits, float("-inf"))
-        mask[indices] = values
-        logits = mask
-
-    probs = F.softmax(logits, dim=-1)
-    token_id = torch.multinomial(probs, num_samples=1).item()
-    return token_id
-
-
 def save_grassmannian_model(
     model, optimizer, itos, stoi, config, path="grassmannian_model.pt"
 ):
@@ -140,64 +131,6 @@ def save_grassmannian_model(
     }
     torch.save(save_dict, path)
     print(f"Saved Grassmannian model to {path}")
-
-
-def generate_text(
-    model,
-    prompt: str,
-    stoi,
-    itos,
-    tokenize,
-    encode,
-    seq_len: int = 16,
-    max_new_tokens: int = 50,
-    temperature: float = 1.0,
-    top_k: int | None = None,
-    device: str | torch.device = "cpu",
-) -> str:
-    """
-    Autoregressive word-level generation using the GrassmannianLanguageModel.
-    """
-    model.eval()
-    device = torch.device(device)
-
-    # 1) Tokenize & encode prompt
-    prompt_tokens = tokenize(prompt)
-    prompt_ids = encode(prompt_tokens)
-
-    # if empty, seed with <unk> or similar
-    if len(prompt_ids) == 0:
-        prompt_ids = [stoi.get("<unk>", 0)]
-
-    # work in a mutable list
-    generated_ids = prompt_ids[:]
-
-    with torch.no_grad():
-        for _ in range(max_new_tokens):
-            # take the last seq_len tokens as context
-            context_ids = generated_ids[-seq_len:]
-            # pad on the left if needed
-            if len(context_ids) < seq_len:
-                pad_id = stoi.get("<pad>", 0)
-                context_ids = [pad_id] * (seq_len - len(context_ids)) + context_ids
-
-            x = torch.tensor(context_ids, dtype=torch.long, device=device).unsqueeze(
-                0
-            )  # (1, seq_len)
-
-            logits, _ = model(x, target_ids=None)
-            # logits: (1, vocab_size)
-            logits = logits[0]  # (vocab_size,)
-
-            next_id = sample_from_logits(logits, temperature=temperature, top_k=top_k)
-
-            generated_ids.append(next_id)
-
-    # Decode tokens back to text (skip leading pads if any)
-    # Here we just join with spaces; you can fancy this up if you like.
-    words = [itos[t] for t in generated_ids]
-    text = " ".join(words)
-    return text
 
 
 def load_grassmannian_model(path, model_class):
@@ -232,3 +165,61 @@ def load_grassmannian_model(path, model_class):
     print(f"Loaded Grassmannian model from {path}")
 
     return model, optimizer_state, itos, stoi, config
+
+
+#########
+
+
+def sample_from_logits(logits, temperature=1.0, top_k=None):
+    if temperature <= 0:
+        raise ValueError("temperature must be > 0")
+    logits = logits / temperature
+
+    if top_k is not None and top_k > 0:
+        values, indices = torch.topk(logits, k=top_k)
+        mask = torch.full_like(logits, float("-inf"))
+        mask[indices] = values
+        logits = mask
+
+    probs = F.softmax(logits, dim=-1)
+    token_id = torch.multinomial(probs, num_samples=1).item()
+    return token_id
+
+
+def generate_text_bpe(
+    model,
+    tokenizer,
+    prompt: str,
+    seq_len: int = 32,
+    max_new_tokens: int = 50,
+    temperature: float = 1.0,
+    top_k: int | None = None,
+    device: str | torch.device = "cpu",
+) -> str:
+    model.eval()
+    device = torch.device(device)
+
+    # encode prompt
+    prompt_ids = tokenizer.encode(prompt).ids
+    if len(prompt_ids) == 0:
+        prompt_ids = [tokenizer.token_to_id("[UNK]")]
+
+    generated_ids = prompt_ids[:]
+
+    with torch.no_grad():
+        for _ in range(max_new_tokens):
+            context_ids = generated_ids[-seq_len:]
+            if len(context_ids) < seq_len:
+                pad_id = tokenizer.token_to_id("[PAD]")
+                context_ids = [pad_id] * (seq_len - len(context_ids)) + context_ids
+
+            x = torch.tensor(context_ids, dtype=torch.long, device=device).unsqueeze(0)
+
+            logits, _ = model(x, target_ids=None)
+            logits = logits[0]
+
+            next_id = sample_from_logits(logits, temperature=temperature, top_k=top_k)
+            generated_ids.append(next_id)
+
+    text = tokenizer.decode(generated_ids)
+    return text
