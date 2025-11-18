@@ -12,9 +12,7 @@ from torch.utils.data import DataLoader, Dataset
 from data import BPEWikiTextWindowDataset
 from model import (
     GrassmannianLanguageModel,
-    # generate_text,
-    load_grassmannian_model,
-    save_grassmannian_model,
+    save_checkpoint,
 )
 
 parser = argparse.ArgumentParser(description="Train a Grassmannian language model")
@@ -60,6 +58,8 @@ config = {
     "seq_len": args.seq_len,
 }
 
+print("config: ", config)
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 print("device: ", device)
@@ -91,15 +91,21 @@ for epoch in range(args.num_epochs):
             print(f"Epoch {epoch + 1}, step {step + 1}, avg loss {avg_loss:.4f}")
             total_loss = 0.0
 
-save_grassmannian_model(
+save_checkpoint(
+    save_dir="checkpoints/grlm",
     model=model,
     optimizer=optimizer,
-    itos=itos,
-    stoi=stoi,
+    tokenizer=tokenizer,
     config=config,
-    path="checkpoints/grass_model.pt",
 )
 
-model, optimizer_state, itos, stoi, config = load_grassmannian_model(
-    osp.join("checkpoints", args.save_path), model_class=GrassmannianLanguageModel
-)
+# save_grassmannian_model(
+#     model=model,
+#     optimizer=optimizer,
+#     config=config,
+#     path="checkpoints/grass_model.pt",
+# )
+
+# model, optimizer_state, itos, stoi, config = load_grassmannian_model(
+#     osp.join("checkpoints", args.save_path), model_class=GrassmannianLanguageModel
+# )

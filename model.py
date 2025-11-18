@@ -1,6 +1,10 @@
+import json
+import os
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from tokenizers import Tokenizer
 
 
 class GRULM(nn.Module):
@@ -112,59 +116,137 @@ class GrassmannianLanguageModel(nn.Module):
         return logits, loss
 
 
-def save_grassmannian_model(
-    model, optimizer, itos, stoi, config, path="grassmannian_model.pt"
+# def save_grassmannian_model(model, optimizer, itos, stoi, config, path="model.pt"):
+#     """
+#     Saves:
+#       - model state dict
+#       - optimizer state dict
+#       - vocab (itos, stoi)
+#       - config dict (hyperparameters)
+#     """
+#     save_dict = {
+#         "model_state": model.state_dict(),
+#         "optimizer_state": optimizer.state_dict() if optimizer is not None else None,
+#         "itos": itos,
+#         "stoi": stoi,
+#         "config": config,
+#     }
+#     torch.save(save_dict, path)
+#     print(f"Saved Grassmannian model to {path}")
+
+
+# def load_grassmannian_model(path, model_class):
+#     """
+#     Loads a saved Grassmannian language model.
+
+#     Args:
+#         path: path to the .pt file saved earlier
+#         model_class: the class definition of GrassmannianLanguageModel
+
+#     Returns:
+#         model, optimizer_state_dict, itos, stoi, config
+#     """
+#     checkpoint = torch.load(path, map_location="cpu")
+
+#     config = checkpoint["config"]
+
+#     # Reconstruct model from config
+#     model = model_class(
+#         vocab_size=config["vocab_size"],
+#         d_model=config["d_model"],
+#         n=config["n"],
+#         k=config["k"],
+#     )
+
+#     model.load_state_dict(checkpoint["model_state"])
+
+#     optimizer_state = checkpoint["optimizer_state"]
+#     itos = checkpoint["itos"]
+#     stoi = checkpoint["stoi"]
+
+#     print(f"Loaded Grassmannian model from {path}")
+
+#     return model, optimizer_state, itos, stoi, config
+
+
+def save_checkpoint(
+    save_dir: str,
+    model,
+    optimizer,
+    tokenizer,
+    config: dict,
+    model_filename: str = "model.pt",
+    tokenizer_filename: str = "tokenizer.json",
 ):
     """
-    Saves:
-      - model state dict
-      - optimizer state dict
-      - vocab (itos, stoi)
-      - config dict (hyperparameters)
+    Save:
+      - model + optimizer state dicts + config in model.pt
+      - tokenizer JSON in tokenizer.json
     """
-    save_dict = {
+    os.makedirs(save_dir, exist_ok=True)
+
+    # 1) Save model + optimizer + config
+    model_path = os.path.join(save_dir, model_filename)
+    save_obj = {
         "model_state": model.state_dict(),
         "optimizer_state": optimizer.state_dict() if optimizer is not None else None,
-        "itos": itos,
-        "stoi": stoi,
         "config": config,
     }
-    torch.save(save_dict, path)
-    print(f"Saved Grassmannian model to {path}")
+    torch.save(save_obj, model_path)
+
+    # 2) Save tokenizer JSON
+    tokenizer_path = os.path.join(save_dir, tokenizer_filename)
+    tokenizer.save(tokenizer_path)
+
+    # 3) Optionally also save config as human-readable JSON
+    config_json_path = os.path.join(save_dir, "config.json")
+    with open(config_json_path, "w") as f:
+        json.dump(config, f, indent=2)
+
+    print(f"Saved checkpoint to {save_dir}")
 
 
-def load_grassmannian_model(path, model_class):
+def load_checkpoint(
+    load_dir: str,
+    model_class,
+    model_filename: str = "model.pt",
+    tokenizer_filename: str = "tokenizer.json",
+    device: str | torch.device = "cpu",
+):
     """
-    Loads a saved Grassmannian language model.
-
-    Args:
-        path: path to the .pt file saved earlier
-        model_class: the class definition of GrassmannianLanguageModel
+    Load:
+      - tokenizer from tokenizer.json
+      - model from model.pt (using config inside)
+      - optimizer_state (if you want to resume training)
 
     Returns:
-        model, optimizer_state_dict, itos, stoi, config
+      tokenizer, model, optimizer_state, config
     """
-    checkpoint = torch.load(path, map_location="cpu")
+    device = torch.device(device)
+
+    # 1) Load tokenizer
+    tokenizer_path = os.path.join(load_dir, tokenizer_filename)
+    tokenizer = Tokenizer.from_file(tokenizer_path)
+
+    # 2) Load model + optimizer state + config
+    model_path = os.path.join(load_dir, model_filename)
+    checkpoint = torch.load(model_path, map_location=device)
 
     config = checkpoint["config"]
+    model_state = checkpoint["model_state"]
+    optimizer_state = checkpoint["optimizer_state"]
 
-    # Reconstruct model from config
+    # 3) Rebuild model from config
     model = model_class(
         vocab_size=config["vocab_size"],
         d_model=config["d_model"],
         n=config["n"],
         k=config["k"],
-    )
+    ).to(device)
+    model.load_state_dict(model_state)
 
-    model.load_state_dict(checkpoint["model_state"])
-
-    optimizer_state = checkpoint["optimizer_state"]
-    itos = checkpoint["itos"]
-    stoi = checkpoint["stoi"]
-
-    print(f"Loaded Grassmannian model from {path}")
-
-    return model, optimizer_state, itos, stoi, config
+    print(f"Loaded model and tokenizer from {load_dir}")
+    return tokenizer, model, optimizer_state, config
 
 
 #########

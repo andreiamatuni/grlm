@@ -1,29 +1,20 @@
+import torch
 from tokenizers import Tokenizer
 
-from model import GrassmannianLanguageModel, generate_text_bpe, load_grassmannian_model
-
-
-# Simple word-level tokenization
-def tokenize(text):
-    return text.strip().split()
-
-
-def encode(tokens):
-    return [stoi.get(t, unk_id) for t in tokens]
-
-
-model, optimizer_state, itos, stoi, config = load_grassmannian_model(
-    "checkpoints/grass_model.pt", model_class=GrassmannianLanguageModel
+from model import (
+    GrassmannianLanguageModel,
+    generate_text_bpe,
+    load_checkpoint,
 )
 
-unk_id = stoi["<unk>"]
+tokenizer, model, optimizer_state, config = load_checkpoint(
+    load_dir="checkpoints/grlm",
+    model_class=GrassmannianLanguageModel,
+    device="cuda" if torch.cuda.is_available() else "cpu",
+)
 
 seq_len = 16
-
 device = "cpu"
-
-tokenizer = Tokenizer.from_file("data/tokenizers/bpe_tokenizer_wt103.json")
-vocab_size = tokenizer.get_vocab_size()
 
 prompt = "The history of natural language models"
 generated = generate_text_bpe(
