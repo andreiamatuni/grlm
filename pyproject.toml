@@ -9,3 +9,6 @@ dependencies = [
     "tokenizers>=0.22.1",
     "torch>=2.9.1",
 ]
+
+[tool.setuptools]
+py-modules = []
