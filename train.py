@@ -40,9 +40,6 @@ parser.add_argument("--d_model", type=int, default=256, help="embedding dimensio
 args = parser.parse_args()
 
 
-# tokenizer = Tokenizer(BPE(unk_token="[UNK]"))
-# tokenizer.pre_tokenizer = Whitespace()
-
 tokenizer = Tokenizer.from_file("data/tokenizers/bpe_tokenizer_wt103.json")
 vocab_size = tokenizer.get_vocab_size()
 
