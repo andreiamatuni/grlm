@@ -46,7 +46,6 @@ vocab_size = tokenizer.get_vocab_size()
 dataset = load_dataset("wikitext", "wikitext-103-raw-v1")
 train_texts = dataset["train"]["text"]
 
-# seq_len = 32
 train_dataset = BPEWikiTextWindowDataset(
     train_texts, tokenizer, seq_len=args.seq_len, max_samples=args.max_samples
 )

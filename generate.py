@@ -1,4 +1,6 @@
-from model import GrassmannianLanguageModel, generate_text, load_grassmannian_model
+from tokenizers import Tokenizer
+
+from model import GrassmannianLanguageModel, generate_text_bpe, load_grassmannian_model
 
 
 # Simple word-level tokenization
@@ -20,15 +22,15 @@ seq_len = 16
 
 device = "cpu"
 
+tokenizer = Tokenizer.from_file("data/tokenizers/bpe_tokenizer_wt103.json")
+vocab_size = tokenizer.get_vocab_size()
+
 prompt = "The history of natural language models"
-generated = generate_text(
+generated = generate_text_bpe(
     model=model,
+    tokenizer=tokenizer,
     prompt=prompt,
-    stoi=stoi,
-    itos=itos,
-    tokenize=tokenize,
-    encode=encode,
-    seq_len=seq_len,  # same as used in training
+    seq_len=seq_len,
     max_new_tokens=50,
     temperature=0.9,
     top_k=40,
